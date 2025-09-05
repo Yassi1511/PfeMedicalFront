@@ -10,6 +10,7 @@ import {
   Ordonnance,
   Medicament
 } from '../types/patient';
+import { MedecinAPI, Medecin, SearchMedecinParams } from '../types/search';
 
 export class PatientApiService {
   // Ordonnances Methods
@@ -110,6 +111,82 @@ export class PatientApiService {
     }
   }
 
+  // Medecins Methods - New APIs
+  static async getAllMedecins(token: string): Promise<Medecin[]> {
+    try {
+      const response = await ApiService.get<MedecinAPI[]>('/', token);
+      console.log('Médecins API response:', response);
+      
+      return response.map(medecin => ({
+        id: medecin._id,
+        nom: medecin.nom,
+        prenom: medecin.prenom,
+        email: medecin.email,
+        numero: medecin.numero,
+        adresse: medecin.adresse,
+        specialite: medecin.specialite,
+        numeroLicence: medecin.numeroLicence,
+        adresseCabinet: medecin.adresseCabinet,
+        nombrePatients: medecin.Patients.length,
+        nombreSecretaires: medecin.Secretaires.length,
+        dateInscription: new Date(medecin.createdAt).toLocaleDateString('fr-FR')
+      }));
+    } catch (error) {
+      console.error('Erreur lors de la récupération des médecins:', error);
+      throw error;
+    }
+  }
+
+  static async searchMedecinsBySpecialite(specialite: string, token: string): Promise<Medecin[]> {
+    try {
+      const response = await ApiService.get<MedecinAPI[]>(`/specialite/${encodeURIComponent(specialite)}`, token);
+      console.log('Recherche par spécialité API response:', response);
+      
+      return response.map(medecin => ({
+        id: medecin._id,
+        nom: medecin.nom,
+        prenom: medecin.prenom,
+        email: medecin.email,
+        numero: medecin.numero,
+        adresse: medecin.adresse,
+        specialite: medecin.specialite,
+        numeroLicence: medecin.numeroLicence,
+        adresseCabinet: medecin.adresseCabinet,
+        nombrePatients: medecin.Patients.length,
+        nombreSecretaires: medecin.Secretaires.length,
+        dateInscription: new Date(medecin.createdAt).toLocaleDateString('fr-FR')
+      }));
+    } catch (error) {
+      console.error('Erreur lors de la recherche par spécialité:', error);
+      throw error;
+    }
+  }
+
+  static async searchMedecinsByName(nom: string, token: string): Promise<Medecin[]> {
+    try {
+      const response = await ApiService.get<MedecinAPI[]>(`/nom/${encodeURIComponent(nom)}`, token);
+      console.log('Recherche par nom API response:', response);
+      
+      return response.map(medecin => ({
+        id: medecin._id,
+        nom: medecin.nom,
+        prenom: medecin.prenom,
+        email: medecin.email,
+        numero: medecin.numero,
+        adresse: medecin.adresse,
+        specialite: medecin.specialite,
+        numeroLicence: medecin.numeroLicence,
+        adresseCabinet: medecin.adresseCabinet,
+        nombrePatients: medecin.Patients.length,
+        nombreSecretaires: medecin.Secretaires.length,
+        dateInscription: new Date(medecin.createdAt).toLocaleDateString('fr-FR')
+      }));
+    } catch (error) {
+      console.error('Erreur lors de la recherche par nom:', error);
+      throw error;
+    }
+  }
+
   // Utility Methods
   private static formatStatut(statut: string): string {
     switch (statut.toLowerCase()) {
@@ -131,13 +208,15 @@ export class PatientApiService {
     totalRendezVous: number;
     totalOrdonnances: number;
     totalMedicaments: number;
+    totalMedecins: number;
     prochainRendezVous?: RendezVous;
   }> {
     try {
-      const [rendezVous, ordonnances, medicaments] = await Promise.all([
+      const [rendezVous, ordonnances, medicaments, medecins] = await Promise.all([
         this.getRendezVous(token),
         this.getOrdonnances(token),
-        this.getMedicaments(token)
+        this.getMedicaments(token),
+        this.getAllMedecins(token)
       ]);
 
       const now = new Date();
@@ -149,6 +228,7 @@ export class PatientApiService {
         totalRendezVous: rendezVous.length,
         totalOrdonnances: ordonnances.length,
         totalMedicaments: medicaments.length,
+        totalMedecins: medecins.length,
         prochainRendezVous
       };
     } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Component, ReactNode } from 'react';
-import { LogOut, User, Stethoscope, Calendar, FileText, Users, ChevronDown, Bell, Heart, UserPlus, Clock, Pill as Pills, Activity, Search, Edit, Phone, Mail, MapPin, ChevronRight, Clipboard, Trash2  } from 'lucide-react';import NotificationPanel from './notifications/NotificationPanel';
+import { LogOut, User, Stethoscope, Calendar, FileText, Users, ChevronDown, Bell, Heart, UserPlus, Clock, Pill as Pills, Activity, Search, Edit, Phone, Mail, MapPin, ChevronRight, Clipboard, Trash2 } from 'lucide-react';
+import NotificationPanel from './notifications/NotificationPanel';
 import EquipeManagement from './equipe/EquipeManagement';
 import RdvManagement from './rdv/RdvManagement';
 import PatientRegistration from './secretary/PatientRegistration';
@@ -13,6 +14,7 @@ import OrdonnanceManagement from './ordonannance/OrdonnanceManagement';
 import { NotificationApiService } from '../service/notificationsApi';
 import TraitementManagement from './treatments/TraitementManagement';
 import { TraitementApiService } from '../service/TraitementApiService';
+import PatientDashboard from './patient/PatientDashboard';
 
 interface DashboardProps {
   user: { token: string; role: string; prenom: string; id: string; nbrPatients?: number };
@@ -29,6 +31,14 @@ interface Patient {
   dateNaissance: string;
   adresse: string;
   dateInscription?: string;
+}
+
+interface Medecin {
+  id: string;
+  nom: string;
+  prenom: string;
+  specialite: string;
+  email: string;
 }
 
 // Error Boundary Component
@@ -70,7 +80,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
   const [showAppointmentScheduler, setShowAppointmentScheduler] = useState(false);
   const [showTraitementManagement, setShowTraitementManagement] = useState(false);
   const [traitementCount, setTraitementCount] = useState(0);
-
   // Medecin specific states
   const [ordonnanceCount, setOrdonnanceCount] = useState(0);
   const [todayAppointmentsCount, setTodayAppointmentsCount] = useState(0);
@@ -78,9 +87,9 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
   // Secretary specific states
   const [patients, setPatients] = useState<Patient[]>([]);
   const [secretaryRendezVous, setSecretaryRendezVous] = useState<RendezVous[]>([]);
+  const [medecins, setMedecins] = useState<Medecin[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('patients');
-
   // Patient specific states
   const [patientRendezVous, setPatientRendezVous] = useState<RendezVous[]>([]);
   const [patientOrdonnances, setPatientOrdonnances] = useState<Ordonnance[]>([]);
@@ -99,7 +108,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
     horaires: [],
   });
   const [error, setError] = useState<string | null>(null);
-
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
   const [notificationError, setNotificationError] = useState<string | null>(null);
@@ -126,11 +134,11 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
     } else if (user.role === 'Medecin') {
       loadOrdonnanceCount();
       loadTodayAppointmentsCount();
-      loadNotifications(); // Fetch notifications for Medecin role if needed
+      loadNotifications();
       loadTraitementCount();
     } else if (user.role === 'Secretaire') {
       loadSecretaryData();
-      loadNotifications(); // Fetch notifications for Secretaire role if needed
+      loadNotifications();
     }
   }, [user.role, user.token, user.id]);
 
@@ -148,7 +156,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
 
   const handleClearAllNotifications = async () => {
     try {
-      // Mark all unread notifications as read
       const unreadNotifications = notifications.filter((notif) => !notif.lu);
       await Promise.all(
         unreadNotifications.map((notif) => NotificationApiService.markAsRead(notif.id, user.token))
@@ -226,31 +233,33 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
   };
 
   const loadSecretaryData = async () => {
-    console.log('Starting loadSecretaryData, Token:', user.token); // TODO: Remove token logging in production
+    console.log('Starting loadSecretaryData, Token:', user.token);
     try {
       setLoading(true);
-      const [patientsData, rdvData] = await Promise.all([
+      const [patientsData, rdvData, medecinsData] = await Promise.all([
         SecretaryApiService.getPatientsBySecretaire(user.token),
         SecretaryApiService.getRendezVous(user.token),
+        SecretaryApiService.getMedecins(user.token),
       ]);
       console.log('Fetched Patients Data:', patientsData);
       console.log('Fetched Rendez-vous Data:', rdvData);
+      console.log('Fetched Medecins Data:', medecinsData);
       setPatients(patientsData);
-      // Ensure rdvData.rendezVous is an array before setting
       setSecretaryRendezVous(Array.isArray(rdvData.rendezVous) ? rdvData.rendezVous : []);
+      setMedecins(medecinsData);
     } catch (error: any) {
       console.error('Erreur lors du chargement des données secrétaire:', {
         message: error.message,
         status: error.response?.status,
         data: error.response?.data,
       });
+      setError('Erreur lors du chargement des données. Veuillez réessayer.');
     } finally {
       setLoading(false);
       console.log('loadSecretaryData completed');
     }
   };
 
-  // Added loadAppointments function to refresh rendez-vous
   const loadAppointments = async () => {
     try {
       setLoading(true);
@@ -283,6 +292,7 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
         status: error.response?.status,
         data: error.response?.data,
       });
+      setError('Erreur lors du chargement des données. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
@@ -345,7 +355,7 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
         voieAdministration: '',
         horaires: [],
       });
-      setShowMedicamentForm(false); // Hide form after adding
+      setShowMedicamentForm(false);
       await loadPatientData();
     } catch (error) {
       console.error('Erreur lors de l\'ajout du médicament:', error);
@@ -423,7 +433,7 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
       description: 'Enregistrer un nouveau patient',
       color: 'from-blue-500 to-blue-600',
       onClick: () => {
-        setEditingPatientId(null); // Reset to create mode
+        setEditingPatientId(null);
         setShowPatientRegistration(true);
       },
     },
@@ -468,10 +478,15 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
     (patient.numero && patient.numero.includes(searchTerm))
   );
 
+  const filteredMedecins = medecins.filter(medecin =>
+    `${medecin.prenom} ${medecin.nom}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    medecin.email.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const todayAppointments = Array.isArray(secretaryRendezVous)
     ? secretaryRendezVous.filter(rdv => {
       const today = new Date().toDateString();
-      return new Date(rdv.date).toDateString();
+      return new Date(rdv.date).toDateString() === today;
     })
     : [];
 
@@ -479,10 +494,82 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
     .filter(rdv => getRdvDateTime(rdv) > Date.now() && rdv.statut !== 'Annulé')
     .sort((a, b) => getRdvDateTime(a) - getRdvDateTime(b))[0];
 
+  // If user is Patient, render the dedicated PatientDashboard component
+  if (user.role === 'Patient') {
+    return (
+      <ErrorBoundary>
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+          <div className="bg-white shadow-lg border-b border-gray-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-between h-16">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <Heart className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold text-gray-900">MedicalAssist</h1>
+                    <p className="text-xs text-gray-500">Gestion médicale</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <NotificationPanel
+                    notifications={notifications}
+                    onMarkAsRead={handleMarkAsRead}
+                    onClearAll={handleClearAllNotifications}
+                  />
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                      className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                    >
+                      <div className={`w-8 h-8 bg-gradient-to-br ${getRoleColor()} rounded-full flex items-center justify-center`}>
+                        <User className="w-4 h-4 text-white" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700">{user.role}</span>
+                      <ChevronDown className={`w-4 h-4 transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showProfileDropdown && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+                        <button
+                          onClick={() => {
+                            onOpenProfile();
+                            setShowProfileDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2 text-gray-700 transition-colors"
+                        >
+                          <User className="w-4 h-4" />
+                          Profil
+                        </button>
+                        <hr className="my-1 border-gray-200" />
+                        <button
+                          onClick={() => {
+                            handleLogout();
+                            setShowProfileDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2 hover:bg-red-50 flex items-center gap-2 text-red-600 transition-colors"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Déconnexion
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <PatientDashboard user={user} onOpenProfile={onOpenProfile} />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        {/* Header */}
         <div className="bg-white shadow-lg border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
@@ -544,7 +631,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Error Message */}
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-8" role="alert">
               <span className="block sm:inline">{error}</span>
@@ -559,7 +645,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </div>
           )}
 
-          {/* Welcome Section */}
           <div className="mb-8">
             <div className={`bg-gradient-to-r ${getRoleColor()} rounded-2xl p-8 text-white relative overflow-hidden`}>
               <div className="absolute top-0 right-0 w-32 h-32 bg-white bg-opacity-10 rounded-full -mr-16 -mt-16"></div>
@@ -587,7 +672,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </div>
           </div>
 
-          {/* Stats Section - Medecin */}
           {user.role === 'Medecin' && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -637,7 +721,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </div>
           )}
 
-          {/* Stats Section - Secretaire */}
           {user.role === 'Secretaire' && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -689,57 +772,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </div>
           )}
 
-          {/* Stats Section - Patient */}
-          {user.role === 'Patient' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Rendez-vous</p>
-                    <p className="text-2xl font-bold text-gray-900">{patientRendezVous.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Ordonnances</p>
-                    <p className="text-2xl font-bold text-gray-900">{patientOrdonnances.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Pills className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Médicaments</p>
-                    <p className="text-2xl font-bold text-gray-900">{patientMedicaments.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Activity className="w-5 h-5 text-orange-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Suivi médical</p>
-                    <p className="text-2xl font-bold text-gray-900">Actif</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Modules Section - Medecin */}
           {user.role === 'Medecin' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {getMedecinModules().map((module, index) => (
@@ -762,7 +794,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </div>
           )}
 
-          {/* Modules Section - Secretaire */}
           {user.role === 'Secretaire' && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -785,7 +816,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
                 ))}
               </div>
 
-              {/* Secretary Content Tabs */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                 <div className="border-b border-gray-200">
                   <nav className="flex space-x-8 px-6">
@@ -809,13 +839,22 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
                       <Calendar className="w-4 h-4 inline mr-2" />
                       Rendez-vous ({todayAppointments.length})
                     </button>
+                    <button
+                      onClick={() => setActiveTab('medecins')}
+                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'medecins'
+                        ? 'border-green-500 text-green-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                      <Stethoscope className="w-4 h-4 inline mr-2" />
+                      Médecins ({medecins.length})
+                    </button>
                   </nav>
                 </div>
 
                 <div className="p-6">
                   {activeTab === 'patients' && (
                     <div className="space-y-4">
-                      {/* Search Bar */}
                       <div className="relative">
                         <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                         <input
@@ -826,8 +865,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
                           className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                         />
                       </div>
-
-                      {/* Patients List */}
                       {loading ? (
                         <div className="text-center py-8">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
@@ -903,10 +940,10 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
                               return new Date(dateA).getTime() - new Date(dateB).getTime();
                             })
                             .reduce((acc, rdv, index, array) => {
-                              const isToday = rdv.date === '2025-09-01'; // Replace with dynamic date if needed
+                              const isToday = new Date(rdv.date).toDateString() === new Date().toDateString();
                               const prevRdv = array[index - 1];
                               const showTodayHeader = isToday && (!prevRdv || prevRdv.date !== rdv.date);
-                              const showOtherHeader = !isToday && (!prevRdv || prevRdv.date === '2025-09-01');
+                              const showOtherHeader = !isToday && (!prevRdv || prevRdv.date === new Date().toDateString());
 
                               return [
                                 ...acc,
@@ -993,358 +1030,55 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
                       )}
                     </div>
                   )}
-                </div>
-              </div>
-            </>
-          )}
 
-          {/* Patient Dashboard Content */}
-          {user.role === 'Patient' && (
-            <>
-              {/* Prochain Rendez-vous */}
-              {prochainRdv && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-purple-600" />
-                    Prochain rendez-vous
-                  </h3>
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium text-gray-900">{prochainRdv.type}</p>
-                        <p className="text-sm text-gray-600">{prochainRdv.medecin}</p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(prochainRdv.date).toLocaleDateString('fr-FR')} à {prochainRdv.heure}
-                        </p>
-                        {prochainRdv.commentaire && (
-                          <p className="text-sm text-gray-600 mt-1">
-                            <span className="font-medium">Note:</span> {prochainRdv.commentaire}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(prochainRdv.statut)}`}>
-                          {prochainRdv.statut}
-                        </span>
-                        {prochainRdv.statut !== 'Annulé' && prochainRdv.statut !== 'Terminé' && (
-                          <button
-                            onClick={() => handleCancelRendezVous(prochainRdv.id)}
-                            className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-                          >
-                            Annuler
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {prochainRdv.statut !== 'Annulé' && prochainRdv.statut !== 'Terminé' && (
-                      <div className="mt-4 flex gap-2">
+                  {activeTab === 'medecins' && (
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                         <input
                           type="text"
-                          className="flex-1 rounded border border-gray-300 p-2 text-sm"
-                          value={comments[prochainRdv.id] ?? ''}
-                          onChange={(e) => setComments({ ...comments, [prochainRdv.id]: e.target.value })}
-                          placeholder="Ajouter un commentaire"
+                          placeholder="Rechercher un médecin..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                         />
-                        <button
-                          onClick={() => handleAddComment(prochainRdv.id)}
-                          className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
-                        >
-                          Ajouter
-                        </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Patient Tabs */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-                <div className="border-b border-gray-200">
-                  <nav className="flex space-x-8 px-6">
-                    <button
-                      onClick={() => setPatientActiveTab('rdv')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${patientActiveTab === 'rdv'
-                        ? 'border-purple-500 text-purple-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                      <Calendar className="w-4 h-4 inline mr-2" />
-                      Mes rendez-vous
-                    </button>
-                    <button
-                      onClick={() => setPatientActiveTab('ordonnances')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${patientActiveTab === 'ordonnances'
-                        ? 'border-purple-500 text-purple-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                      <FileText className="w-4 h-4 inline mr-2" />
-                      Mes ordonnances
-                    </button>
-                    <button
-                      onClick={() => setPatientActiveTab('medicaments')}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${patientActiveTab === 'medicaments'
-                        ? 'border-purple-500 text-purple-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                      <Pills className="w-4 h-4 inline mr-2" />
-                      Mes médicaments
-                    </button>
-                  </nav>
-                </div>
-
-                <div className="p-6">
-                  {patientActiveTab === 'rdv' && (
-                    <div className="space-y-4">
                       {loading ? (
                         <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
                           <p className="text-gray-600 mt-2">Chargement...</p>
                         </div>
-                      ) : patientRendezVous.length > 0 ? (
-                        patientRendezVous.map((rdv) => (
-                          <div key={rdv.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <h4 className="font-medium text-gray-900">{rdv.type}</h4>
-                                <p className="text-sm text-gray-600">{rdv.medecin}</p>
-                                <p className="text-sm text-gray-600">
-                                  {new Date(rdv.date).toLocaleDateString('fr-FR')} à {rdv.heure}
-                                </p>
-                                {rdv.commentaire && (
-                                  <p className="text-sm text-gray-600 mt-1">
-                                    <span className="font-medium">Note:</span> {rdv.commentaire}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(rdv.statut)}`}>
-                                  {rdv.statut}
-                                </span>
-                                {rdv.statut !== 'Annulé' && rdv.statut !== 'Terminé' && (
-                                  <button
-                                    onClick={() => handleCancelRendezVous(rdv.id)}
-                                    className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-                                  >
-                                    Annuler
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            {rdv.statut !== 'Annulé' && rdv.statut !== 'Terminé' && (
-                              <div className="mt-4 flex gap-2">
-                                <input
-                                  type="text"
-                                  className="flex-1 rounded border border-gray-300 p-2 text-sm"
-                                  value={comments[rdv.id] ?? ''}
-                                  onChange={(e) => setComments({ ...comments, [rdv.id]: e.target.value })}
-                                  placeholder="Ajouter un commentaire"
-                                />
-                                <button
-                                  onClick={() => handleAddComment(rdv.id)}
-                                  className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
-                                >
-                                  Ajouter
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-8">
-                          <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                          <p className="text-gray-600">Aucun rendez-vous planifié</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {patientActiveTab === 'ordonnances' && (
-                    <div className="space-y-4">
-                      {loading ? (
-                        <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-                          <p className="text-gray-600 mt-2">Chargement...</p>
-                        </div>
-                      ) : patientOrdonnances.length > 0 ? (
-                        patientOrdonnances.map((ord) => (
-                          <div key={ord.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Pills className="w-4 h-4 text-purple-600" />
+                      ) : filteredMedecins.length > 0 ? (
+                        <div className="space-y-3">
+                          {filteredMedecins.map((medecin) => (
+                            <div key={medecin.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1">
                                   <h4 className="font-medium text-gray-900">
-                                    {ord.traitementNom || `Ordonnance du ${new Date(ord.date).toLocaleDateString('fr-FR')}`}
+                                    Dr. {medecin.prenom} {medecin.nom}
                                   </h4>
-                                </div>
-                                <p className="text-sm text-gray-600 mb-2">Prescrite par {ord.medecin}</p>
-                                <div className="text-sm text-gray-700">
-                                  <p className="font-medium">Médicaments:</p>
-                                  <ul className="list-disc list-inside mt-1">
-                                    {ord.medicaments.map((med, index) => (
-                                      <li key={index}>{med}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              </div>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ord.statut)}`}>
-                                {ord.statut}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-center py-8">
-                          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                          <p className="text-gray-600">Aucune ordonnance disponible</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {patientActiveTab === 'medicaments' && (
-                    <div className="space-y-4">
-                      {loading ? (
-                        <div className="text-center py-8">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-                          <p className="text-gray-600 mt-2">Chargement...</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="mb-4">
-                            <button
-                              onClick={() => setShowMedicamentForm(!showMedicamentForm)}
-                              className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
-                            >
-                              {showMedicamentForm ? 'Masquer le formulaire' : 'Ajouter un nouveau médicament'}
-                            </button>
-                            {showMedicamentForm && (
-                              <div className="mt-4 bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                                <h3 className="text-lg font-semibold text-gray-900 mb-4">Ajouter un nouveau médicament</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Date de début</label>
-                                    <input
-                                      type="date"
-                                      value={newMedicament.dateDebut}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, dateDebut: e.target.value })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Date de fin</label>
-                                    <input
-                                      type="date"
-                                      value={newMedicament.dateFin}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, dateFin: e.target.value })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Dosage</label>
-                                    <input
-                                      type="text"
-                                      placeholder="ex: 500mg"
-                                      value={newMedicament.dosage}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, dosage: e.target.value })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Fréquence (par jour)</label>
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      value={newMedicament.frequence}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, frequence: parseInt(e.target.value) || 1 })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Nom commercial</label>
-                                    <input
-                                      type="text"
-                                      placeholder="ex: Paracétamol"
-                                      value={newMedicament.nomCommercial}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, nomCommercial: e.target.value })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700">Voie d'administration</label>
-                                    <select
-                                      value={newMedicament.voieAdministration}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, voieAdministration: e.target.value })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                      required
-                                    >
-                                      <option value="">Sélectionner...</option>
-                                      <option value="Orale">Orale</option>
-                                      <option value="Intraveineuse">Intraveineuse</option>
-                                      <option value="Topique">Topique</option>
-                                      <option value="Inhalation">Inhalation</option>
-                                    </select>
-                                  </div>
-                                  <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700">Horaires (séparés par virgule)</label>
-                                    <input
-                                      type="text"
-                                      placeholder="ex: 08:00, 12:00, 20:00"
-                                      value={newMedicament.horaires.join(', ')}
-                                      onChange={(e) => setNewMedicament({ ...newMedicament, horaires: e.target.value.split(',').map(h => h.trim()).filter(h => h) })}
-                                      className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
-                                    />
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={handleAddMedicament}
-                                  className="mt-4 bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
-                                >
-                                  Ajouter le médicament
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          {patientMedicaments.length > 0 ? (
-                            patientMedicaments.map((med) => (
-                              <div key={med.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                                <div className="flex justify-between items-start">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Pills className="w-4 h-4 text-green-600" />
-                                      <h4 className="font-medium text-gray-900">{med.nomCommercial}</h4>
+                                  <div className="mt-2 space-y-1">
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                      <Stethoscope className="w-4 h-4" />
+                                      {medecin.specialite}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                                      <div>
-                                        <p><span className="font-medium">Dosage:</span> {med.dosage}</p>
-                                        <p><span className="font-medium">Fréquence:</span> {med.frequence}x/jour</p>
-                                        <p><span className="font-medium">Voie:</span> {med.voieAdministration}</p>
-                                      </div>
-                                      <div>
-                                        <p><span className="font-medium">Début:</span> {med.dateDebut}</p>
-                                        <p><span className="font-medium">Fin:</span> {med.dateFin}</p>
-                                        {med.horaires.length > 0 && (
-                                          <p><span className="font-medium">Horaires:</span> {med.horaires.join(', ')}</p>
-                                        )}
-                                      </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                      <Mail className="w-4 h-4" />
+                                      {medecin.email}
                                     </div>
                                   </div>
                                 </div>
                               </div>
-                            ))
-                          ) : (
-                            <div className="text-center py-8">
-                              <Pills className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                              <p className="text-gray-600">Aucun médicament en cours</p>
                             </div>
-                          )}
-                        </>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Stethoscope className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                          <p className="text-gray-600">
+                            {searchTerm ? 'Aucun médecin trouvé' : 'Aucun médecin enregistré'}
+                          </p>
+                        </div>
                       )}
                     </div>
                   )}
@@ -1353,7 +1087,6 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
             </>
           )}
 
-          {/* Modals - Medecin */}
           {showEquipeManagement && (
             <EquipeManagement token={user.token} onClose={() => setShowEquipeManagement(false)} />
           )}
@@ -1367,33 +1100,29 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
               onClose={() => setShowOrdonnanceManagement(false)}
             />
           )}
-
           {showTraitementManagement && (
             <TraitementManagement
               token={user.token}
               onClose={() => setShowTraitementManagement(false)}
             />
           )}
-
-          {/* Modals - Secretary */}
           {showPatientRegistration && (
             <PatientRegistration
               token={user.token}
               onClose={() => {
                 setShowPatientRegistration(false);
-                setEditingPatientId(null); // Reset edit state
+                setEditingPatientId(null);
                 setEditingRdvId(null);
               }}
               onSuccess={() => {
                 setShowPatientRegistration(false);
                 setEditingRdvId(null);
-                setEditingPatientId(null); // Reset edit state
+                setEditingPatientId(null);
                 loadSecretaryData();
               }}
-              patientId={editingPatientId} // Pass the patient ID for editing
+              patientId={editingPatientId}
             />
           )}
-
           {showAppointmentScheduler && (
             <AppointmentScheduler
               token={user.token}

@@ -1,6 +1,5 @@
-// components/SecretaryDashboard.js (updated component)
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Calendar, Users, Bell, Search, Edit, Phone, Mail, MapPin, ChevronRight, Clock } from 'lucide-react';
+import { UserPlus, Calendar, Users, Bell, Search, Edit, Phone, Mail, MapPin, ChevronRight, Clock, Stethoscope } from 'lucide-react';
 import { SecretaryApiService } from '../../service/SecretaryApiService';
 import PatientRegistration from './PatientRegistration';
 import AppointmentScheduler from './AppointmentScheduler';
@@ -34,38 +33,50 @@ interface RendezVous {
   medecinId: string;
 }
 
+interface Medecin {
+  id: string;
+  nom: string;
+  prenom: string;
+  specialite: string;
+  email: string;
+}
+
 export default function SecretaryDashboard({ user, onOpenProfile }: SecretaryDashboardProps) {
   console.log('SecretaryDashboard component rendered');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [rendezVous, setRendezVous] = useState<RendezVous[]>([]);
+  const [medecins, setMedecins] = useState<Medecin[]>([]);
   const [showPatientRegistration, setShowPatientRegistration] = useState(false);
   const [showAppointmentScheduler, setShowAppointmentScheduler] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('patients'); // Changed to 'patients' for patient list focus
+  const [activeTab, setActiveTab] = useState('patients');
 
   useEffect(() => {
     console.log('useEffect triggered for loadSecretaryData');
     loadSecretaryData();
   }, []);
 
-const loadSecretaryData = async () => {
-  try {
-    setLoading(true);
-    const [patientsData, rdvData] = await Promise.all([
-      SecretaryApiService.getPatientsBySecretaire(user.token),
-      SecretaryApiService.getRendezVous(user.token),
-    ]);
-    console.log('Fetched Patients Data:', patientsData);
-    console.log('Fetched Rendez-vous Data:', rdvData);
-    setPatients(patientsData);
-    setSecretaryRendezVous(rdvData); // Fixed: Changed setRendezVous to setSecretaryRendezVous
-  } catch (error) {
-    console.error('Erreur lors du chargement des données:', error);
-  } finally {
-    setLoading(false);
-  }
-};
+  const loadSecretaryData = async () => {
+    try {
+      setLoading(true);
+      const [patientsData, rdvData, medecinsData] = await Promise.all([
+        SecretaryApiService.getPatientsBySecretaire(user.token),
+        SecretaryApiService.getRendezVous(user.token),
+        SecretaryApiService.getMedecins(user.token),
+      ]);
+      console.log('Fetched Patients Data:', patientsData);
+      console.log('Fetched Rendez-vous Data:', rdvData);
+      console.log('Fetched Medecins Data:', medecinsData);
+      setPatients(patientsData);
+      setRendezVous(rdvData);
+      setMedecins(medecinsData);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const todayAppointments = rendezVous.filter((rdv) => {
@@ -126,6 +137,10 @@ const loadSecretaryData = async () => {
 
   const filteredPatients = patients.filter((patient) =>
     `${patient.nom} ${patient.prenom}`.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredMedecins = medecins.filter((medecin) =>
+    `${medecin.nom} ${medecin.prenom}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -258,13 +273,22 @@ const loadSecretaryData = async () => {
                 <Calendar className="w-4 h-4 inline mr-2" />
                 Rendez-vous du jour ({todayAppointments.length})
               </button>
+              <button
+                onClick={() => setActiveTab('medecins')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'medecins'
+                    ? 'border-green-500 text-green-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
+              >
+                <Stethoscope className="w-4 h-4 inline mr-2" />
+                Médecins ({medecins.length})
+              </button>
             </nav>
           </div>
 
           <div className="p-6">
             {activeTab === 'patients' && (
               <div className="space-y-4">
-                {/* Search Bar */}
                 <div className="relative">
                   <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                   <input
@@ -275,8 +299,6 @@ const loadSecretaryData = async () => {
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
-
-                {/* Patients List */}
                 {loading ? (
                   <div className="text-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
@@ -369,6 +391,58 @@ const loadSecretaryData = async () => {
                   <div className="text-center py-8">
                     <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
                     <p className="text-gray-600">Aucun rendez-vous aujourd'hui</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'medecins' && (
+              <div className="space-y-4">
+                <div className="relative">
+                  <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un médecin..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                    <p className="text-gray-600 mt-2">Chargement...</p>
+                  </div>
+                ) : filteredMedecins.length > 0 ? (
+                  <div className="space-y-3">
+                    {filteredMedecins.map((medecin) => (
+                      <div key={medecin.id} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">
+                              {medecin.nom} {medecin.prenom} 
+                            </h4>
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Stethoscope className="w-4 h-4" />
+                                {medecin.specialite}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Mail className="w-4 h-4" />
+                                {medecin.email}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Stethoscope className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-600">
+                      {searchTerm ? 'Aucun médecin trouvé' : 'Aucun médecin enregistré'}
+                    </p>
                   </div>
                 )}
               </div>

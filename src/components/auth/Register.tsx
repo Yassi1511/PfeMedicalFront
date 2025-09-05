@@ -25,6 +25,9 @@ export default function Register({ onToggleForm, onRegisterSuccess }: RegisterPr
     numeroLicence: '',
     specialite: '',
     adresseCabinet: '',
+    bureau: '',
+    dateEmbauche: '',
+    adresse: '',  // ✅ Add this field
   });
   const [errors, setErrors] = useState<Partial<RegisterErrors>>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -38,6 +41,7 @@ export default function Register({ onToggleForm, onRegisterSuccess }: RegisterPr
   const roles = [
     { value: 'Medecin', label: 'Médecin', description: 'Accès complet aux dossiers patients' },
     { value: 'Patient', label: 'Patient', description: 'Accès aux rendez-vous et dossiers médicaux' },
+    { value: 'Secretaire', label: 'Secrétaire', description: 'Accès aux rendez-vous et gestion administrative' },
   ];
 
   const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -46,7 +50,7 @@ export default function Register({ onToggleForm, onRegisterSuccess }: RegisterPr
 
   // Validation schemas for each step
   const step1Schema = Yup.object().shape({
-    role: Yup.string().required('Le type de compte est requis').oneOf(['Medecin', 'Patient'], 'Type de compte invalide'),
+    role: Yup.string().required('Le type de compte est requis').oneOf(['Medecin', 'Patient', 'Secretaire'], 'Type de compte invalide'),
   });
 
   const step2Schema = Yup.object().shape({
@@ -81,36 +85,43 @@ export default function Register({ onToggleForm, onRegisterSuccess }: RegisterPr
     adresseCabinet: Yup.string().required('L\'adresse du cabinet est requise'),
   });
 
-const validateStep = async (): Promise<boolean> => {
-  try {
-    if (currentStep === 1) {
-      await step1Schema.validate({ role: formData.role }, { abortEarly: false });
-    } else if (currentStep === 2) {
-      await step2Schema.validate(formData, { abortEarly: false });
-    } else if (currentStep === 3) {
-      if (formData.role === 'Patient') {
-        await patientStep3Schema.validate(formData, { abortEarly: false });
-      } else {
-        await medecinStep3Schema.validate(formData, { abortEarly: false });
-      }
-    }
+  const secretaireStep3Schema = Yup.object().shape({
+    bureau: Yup.string().required('Le bureau est requis'),
+    dateEmbauche: Yup.string().required('La date d\'embauche est requise'),
+  });
 
-    setErrors({});
-    return true;
-  } catch (err) {
-    if (err instanceof Yup.ValidationError) {
-      const newErrors: RegisterErrors = {};
-      err.inner.forEach(error => {
-        if (error.path && (error.path in formData)) {
-          // Only assign errors for fields that exist in RegisterErrors
-          newErrors[error.path as keyof RegisterErrors] = error.message;
+  const validateStep = async (): Promise<boolean> => {
+    try {
+      if (currentStep === 1) {
+        await step1Schema.validate({ role: formData.role }, { abortEarly: false });
+      } else if (currentStep === 2) {
+        await step2Schema.validate(formData, { abortEarly: false });
+      } else if (currentStep === 3) {
+        if (formData.role === 'Patient') {
+          await patientStep3Schema.validate(formData, { abortEarly: false });
+        } else if (formData.role === 'Medecin') {
+          await medecinStep3Schema.validate(formData, { abortEarly: false });
+        } else if (formData.role === 'Secretaire') {
+          await secretaireStep3Schema.validate(formData, { abortEarly: false });
         }
-      });
-      setErrors(newErrors);
+      }
+
+      setErrors({});
+      return true;
+    } catch (err) {
+      if (err instanceof Yup.ValidationError) {
+        const newErrors: RegisterErrors = {};
+        err.inner.forEach(error => {
+          if (error.path && (error.path in formData)) {
+            // Only assign errors for fields that exist in RegisterErrors
+            newErrors[error.path as keyof RegisterErrors] = error.message;
+          }
+        });
+        setErrors(newErrors);
+      }
+      return false;
     }
-    return false;
-  }
-};
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -560,6 +571,61 @@ const validateStep = async (): Promise<boolean> => {
                 <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
                   <AlertCircle className="w-4 h-4" />
                   {errors.adresseCabinet}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+
+        {currentStep === 3 && formData.role === 'Secretaire' && (
+          <>
+            <div>
+              <label htmlFor="bureau" className="block text-sm font-medium text-gray-700 mb-2">
+                Bureau
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  id="bureau"
+                  name="bureau"
+                  value={formData.bureau}
+                  onChange={handleChange}
+                  className={`w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 ${
+                    errors.bureau ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-gray-50'
+                  }`}
+                  placeholder="Bureau"
+                />
+              </div>
+              {errors.bureau && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.bureau}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="dateEmbauche" className="block text-sm font-medium text-gray-700 mb-2">
+                Date d'embauche
+              </label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="date"
+                  id="dateEmbauche"
+                  name="dateEmbauche"
+                  value={formData.dateEmbauche}
+                  onChange={handleChange}
+                  className={`w-full pl-12 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200 ${
+                    errors.dateEmbauche ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-gray-50'
+                  }`}
+                />
+              </div>
+              {errors.dateEmbauche && (
+                <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errors.dateEmbauche}
                 </p>
               )}
             </div>

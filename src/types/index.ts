@@ -10,17 +10,18 @@ export interface RegisterData {
   email: string;
   numero: string;
   motDePasse: string;
-  role: 'Medecin' | 'Patient';
+  role: 'Medecin' | 'Patient' | 'Secretaire';
   patients?: string[]; // For Medecin role
-  Medecins?: string[]; // For Patient role
+  Medecins?: string[]; // For Patient or Secretaire role
   dateNaissance?: string; // For Patient
   sexe?: string; // For Patient
   groupeSanguin?: string; // For Patient
   numeroLicence?: string; // For Medecin
   specialite?: string; // For Medecin
   adresseCabinet?: string; // For Medecin
+  bureau?: string; // For Secretaire
+  dateEmbauche?: string; // For Secretaire
 }
-
 export interface AuthResponse {
   token: string;
   role: string;
@@ -44,5 +45,6 @@ export interface RegisterErrors {
   numeroLicence?: string;
   specialite?: string;
   adresseCabinet?: string;
-  patients?: string; // Add patients field to match RegisterData
+  bureau?: string;
+  dateEmbauche?: string;
 }

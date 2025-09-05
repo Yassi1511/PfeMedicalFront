@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Calendar, FileText, User, Clock, Pill as Pills, Activity } from 'lucide-react';
+import { Calendar, FileText, User, Clock, Pill as Pills, Stethoscope, Search, Phone, Mail, MapPin } from 'lucide-react';
 import { PatientApiService } from '../../service/PatientApiService';
 import { RendezVous, Ordonnance, Medicament, OrdonnanceAPI, CreateMedicamentDTO } from '../../types/patient';
+import { Medecin } from '../../types/medecin';
 
 interface PatientDashboardProps {
   user: { token: string; prenom: string; id: string };
@@ -12,6 +13,8 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
   const [rendezVous, setRendezVous] = useState<RendezVous[]>([]);
   const [ordonnances, setOrdonnances] = useState<Ordonnance[]>([]);
   const [medicaments, setMedicaments] = useState<Medicament[]>([]);
+  const [medecins, setMedecins] = useState<Medecin[]>([]);
+  const [filteredMedecins, setFilteredMedecins] = useState<Medecin[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('rdv');
   const [comments, setComments] = useState<{ [key: string]: string }>({});
@@ -28,28 +31,105 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
   const [error, setError] = useState<string | null>(null);
   const [showMedicamentForm, setShowMedicamentForm] = useState(false);
   const [horairesInput, setHorairesInput] = useState('');
+  
+  // Medecins search states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchType, setSearchType] = useState<'all' | 'name' | 'specialite'>('all');
+  const [loadingMedecins, setLoadingMedecins] = useState(false);
+  const [selectedSpecialite, setSelectedSpecialite] = useState('');
+
+  // Get unique specialities from medecins
+  const specialites = Array.from(new Set(medecins.map(m => m.specialite))).filter(Boolean);
 
   useEffect(() => {
     loadPatientData();
   }, []);
 
+  useEffect(() => {
+    filterMedecins();
+  }, [medecins, searchTerm, searchType, selectedSpecialite]);
+
   const loadPatientData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [rdvData, ordData, medData] = await Promise.all([
+      const [rdvData, ordData, medData, medecinData] = await Promise.all([
         PatientApiService.getRendezVous(user.token),
         PatientApiService.getOrdonnances(user.token),
-        PatientApiService.getMedicaments(user.token)
+        PatientApiService.getMedicaments(user.token),
+        PatientApiService.getAllMedecins(user.token)
       ]);
       setRendezVous(rdvData);
       setOrdonnances(ordData);
       setMedicaments(medData);
+      setMedecins(medecinData);
+      setFilteredMedecins(medecinData);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
       setError('Erreur lors du chargement des données. Veuillez réessayer.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const filterMedecins = () => {
+    let filtered = [...medecins];
+
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(medecin => {
+        const fullName = `${medecin.prenom} ${medecin.nom}`.toLowerCase();
+        const searchTermLower = searchTerm.toLowerCase();
+        
+        return fullName.includes(searchTermLower) || 
+               medecin.specialite.toLowerCase().includes(searchTermLower) ||
+               medecin.email.toLowerCase().includes(searchTermLower) ||
+               medecin.adresseCabinet.toLowerCase().includes(searchTermLower);
+      });
+    }
+
+    if (selectedSpecialite) {
+      filtered = filtered.filter(medecin => medecin.specialite === selectedSpecialite);
+    }
+
+    setFilteredMedecins(filtered);
+  };
+
+  const handleSearchMedecins = async () => {
+    if (!searchTerm.trim()) {
+      setFilteredMedecins(medecins);
+      return;
+    }
+
+    try {
+      setLoadingMedecins(true);
+      setError(null);
+      let results: Medecin[] = [];
+
+      if (searchType === 'name') {
+        results = await PatientApiService.searchMedecinsByName(searchTerm, user.token);
+      } else if (searchType === 'specialite') {
+        results = await PatientApiService.searchMedecinsBySpecialite(searchTerm, user.token);
+      } else {
+        // Search all - try both name and specialite
+        const [nameResults, specialiteResults] = await Promise.all([
+          PatientApiService.searchMedecinsByName(searchTerm, user.token).catch(() => []),
+          PatientApiService.searchMedecinsBySpecialite(searchTerm, user.token).catch(() => [])
+        ]);
+        
+        // Merge and deduplicate results
+        const allResults = [...nameResults, ...specialiteResults];
+        const uniqueResults = allResults.filter((medecin, index, self) => 
+          index === self.findIndex(m => m.id === medecin.id)
+        );
+        results = uniqueResults;
+      }
+
+      setFilteredMedecins(results);
+    } catch (error) {
+      console.error('Erreur lors de la recherche de médecins:', error);
+      setError('Erreur lors de la recherche. Veuillez réessayer.');
+    } finally {
+      setLoadingMedecins(false);
     }
   };
 
@@ -100,13 +180,12 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
       const data: CreateMedicamentDTO = {
         ...newMedicament,
         frequence: parseInt(String(newMedicament.frequence), 10),
-   horaires: horairesInput
-        .split(',')
-        .map(h => h.trim())
-        .filter(h => h), // clean values
-    };
+        horaires: horairesInput
+          .split(',')
+          .map(h => h.trim())
+          .filter(h => h),
+      };
       
-      // Basic validation
       if (!data.dateDebut || !data.dateFin || !data.nomCommercial || !data.dosage || !data.voieAdministration) {
         setError('Tous les champs obligatoires doivent être remplis.');
         return;
@@ -127,8 +206,8 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
         voieAdministration: '',
         horaires: [],
       });
-      setHorairesInput(''); // reset input field
-      setShowMedicamentForm(false); // Hide form after adding
+      setHorairesInput('');
+      setShowMedicamentForm(false);
       await loadPatientData();
     } catch (error) {
       console.error('Erreur lors de l\'ajout du médicament:', error);
@@ -241,11 +320,11 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Activity className="w-5 h-5 text-orange-600" />
+              <Stethoscope className="w-5 h-5 text-orange-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-600">Suivi médical</p>
-              <p className="text-2xl font-bold text-gray-900">Actif</p>
+              <p className="text-sm text-gray-600">Médecins</p>
+              <p className="text-2xl font-bold text-gray-900">{medecins.length}</p>
             </div>
           </div>
         </div>
@@ -285,12 +364,6 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
                       className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
                     >
                       Ajouter
-                    </button>
-                    <button
-                      onClick={() => handleCancelRendezVous(prochainRdv.id)}
-                      className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-                    >
-                      Annuler
                     </button>
                   </div>
                 )}
@@ -340,6 +413,17 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
               <Pills className="w-4 h-4 inline mr-2" />
               Mes médicaments
             </button>
+            <button
+              onClick={() => setActiveTab('medecins')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'medecins'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Stethoscope className="w-4 h-4 inline mr-2" />
+              Médecins ({medecins.length})
+            </button>
           </nav>
         </div>
 
@@ -387,12 +471,6 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
                           className="bg-purple-600 text-white px-4 py-2 rounded text-sm hover:bg-purple-700"
                         >
                           Ajouter
-                        </button>
-                        <button
-                          onClick={() => handleCancelRendezVous(rdv.id)}
-                          className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700"
-                        >
-                          Annuler
                         </button>
                       </div>
                     )}
@@ -575,7 +653,6 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
                             onChange={(e) => setHorairesInput(e.target.value)}
                             className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm"
                           />
-
                           </div>
                         </div>
                         <button
@@ -621,6 +698,126 @@ export default function PatientDashboard({ user, onOpenProfile }: PatientDashboa
                     </div>
                   )}
                 </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'medecins' && (
+            <div className="space-y-6">
+              {/* Search and Filter Section */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="flex-1 min-w-64">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Rechercher un médecin
+                    </label>
+                    <div className="relative">
+                      <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Nom, spécialité, email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        onKeyPress={(e) => e.key === 'Enter' && handleSearchMedecins()}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="min-w-40">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Spécialité
+                    </label>
+                    <select
+                      value={selectedSpecialite}
+                      onChange={(e) => setSelectedSpecialite(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    >
+                      <option value="">Toutes les spécialités</option>
+                      {specialites.map(specialite => (
+                        <option key={specialite} value={specialite}>{specialite}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <button
+                    onClick={handleSearchMedecins}
+                    disabled={loadingMedecins}
+                    className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                  >
+                    {loadingMedecins ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                    Rechercher
+                  </button>
+                </div>
+              </div>
+
+              {/* Medecins List */}
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                  <p className="text-gray-600 mt-2">Chargement...</p>
+                </div>
+              ) : filteredMedecins.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {filteredMedecins.map((medecin) => (
+                    <div key={medecin.id} className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                          <Stethoscope className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">
+                               {medecin.nom} {medecin.prenom}
+                              </h3>
+                              <p className="text-purple-600 font-medium text-sm">{medecin.specialite}</p>
+                              <p className="text-gray-500 text-xs">N° Licence: {medecin.numeroLicence}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 space-y-2">
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Phone className="w-4 h-4" />
+                              <span>{medecin.numero || 'Non fourni'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <Mail className="w-4 h-4" />
+                              <span>{medecin.email}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-gray-600">
+                              <MapPin className="w-4 h-4" />
+                              <span>{medecin.adresseCabinet}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Stethoscope className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600">
+                    {searchTerm || selectedSpecialite ? 'Aucun médecin trouvé' : 'Aucun médecin disponible'}
+                  </p>
+                  {(searchTerm || selectedSpecialite) && (
+                    <button
+                      onClick={() => {
+                        setSearchTerm('');
+                        setSelectedSpecialite('');
+                        setFilteredMedecins(medecins);
+                      }}
+                      className="mt-2 text-purple-600 hover:text-purple-700 text-sm font-medium"
+                    >
+                      Réinitialiser les filtres
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
