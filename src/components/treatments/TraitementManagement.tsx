@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus, Save, Trash2, Edit, Search, Pill } from 'lucide-react';
-import { TraitementApiService, CreateTraitementDTO, UpdateTraitementDTO, Traitement, MedicamentTraitement } from '../../service/TraitementApiService';
+import { TraitementApiService, CreateTraitementDTO, UpdateTraitementDTO, Traitement, MedicamentTraitement } from '../../service/traitementApiService';
+import { PatientInfo, SecretaryApiService } from '../../service/SecretaryApiService'; // Import the patient API
 
 interface TraitementManagementProps {
   token: string;
@@ -9,6 +10,7 @@ interface TraitementManagementProps {
 
 export default function TraitementManagement({ token, onClose }: TraitementManagementProps) {
   const [traitements, setTraitements] = useState<Traitement[]>([]);
+  const [patients, setPatients] = useState<PatientInfo[]>([]); // State for patients
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,6 +20,7 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
   const [newTraitement, setNewTraitement] = useState<CreateTraitementDTO>({
     nom: '',
     observations: '',
+    patientId: '', // Add patient field
     medicaments: [],
   });
   const [newMedicament, setNewMedicament] = useState<MedicamentTraitement>({
@@ -29,6 +32,7 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
     dateFin: '',
     horaires: [],
   });
+  const [horairesInput, setHorairesInput] = useState<string>(''); // New state for raw horaires input
 
   useEffect(() => {
     loadData();
@@ -38,8 +42,12 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
     try {
       setLoading(true);
       setError(null);
-      const traitementsData = await TraitementApiService.getAllTraitements(token);
+      const [traitementsData, patientsData] = await Promise.all([
+        TraitementApiService.getAllTraitements(token),
+        SecretaryApiService.getPatientsByMedecinId(token, localStorage.getItem('id') || ''), // Fetch patients
+      ]);
       setTraitements(traitementsData);
+      setPatients(patientsData);
     } catch (err: any) {
       console.error('Error loading data:', err);
       setError(err.message || 'Erreur lors du chargement des données.');
@@ -66,11 +74,13 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
       }
       const traitementData: CreateTraitementDTO = {
         ...newTraitement,
+        patientId: newTraitement.patientId || undefined, // Include patient if selected
       };
       await TraitementApiService.createTraitement(traitementData, token);
       setNewTraitement({
         nom: '',
         observations: '',
+        patientId: '',
         medicaments: [],
       });
       setShowCreateForm(false);
@@ -93,6 +103,7 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
       const updateData: UpdateTraitementDTO = {
         nom: newTraitement.nom || undefined,
         observations: newTraitement.observations || undefined,
+        patientId: newTraitement.patientId || undefined, // Include patient if selected
         medicaments: newTraitement.medicaments.length > 0 ? newTraitement.medicaments : undefined,
       };
       await TraitementApiService.updateTraitement(editingTraitement._id, updateData, token);
@@ -100,8 +111,10 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
       setNewTraitement({
         nom: '',
         observations: '',
+        patientId: '',
         medicaments: [],
       });
+      setHorairesInput(''); // Clear horairesInput on form reset
       await loadData();
     } catch (err: any) {
       console.error('Error updating treatment:', err);
@@ -126,9 +139,14 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
       setError('Tous les champs du médicament sont obligatoires.');
       return;
     }
+    // Convert horairesInput to array for newMedicament
+    const horairesArray = horairesInput
+      .split(';')
+      .map(h => h.trim())
+      .filter(h => h);
     setNewTraitement({
       ...newTraitement,
-      medicaments: [...newTraitement.medicaments, { ...newMedicament, horaires: newMedicament.horaires || [] }],
+      medicaments: [...newTraitement.medicaments, { ...newMedicament, horaires: horairesArray }],
     });
     setNewMedicament({
       nomCommercial: '',
@@ -139,6 +157,7 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
       dateFin: '',
       horaires: [],
     });
+    setHorairesInput(''); // Clear the input field
   };
 
   const handleRemoveMedicament = (index: number) => {
@@ -203,6 +222,21 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
                     placeholder="ex: Traitement pour hypertension"
                     required
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Patient</label>
+                  <select
+                    value={newTraitement.patientId || ''}
+                    onChange={(e) => setNewTraitement({ ...newTraitement, patientId: e.target.value })}
+                    className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Aucun patient</option>
+                    {patients.map((patient) => (
+                      <option key={patient._id} value={patient._id}>
+                        {patient.prenom} {patient.nom}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="col-span-1 sm:col-span-2">
                   <label className="block text-sm font-medium text-gray-700">Observations</label>
@@ -287,13 +321,13 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
                       />
                     </div>
                     <div className="col-span-1 sm:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700">Horaires (séparés par virgule, optionnel)</label>
+                      <label className="block text-sm font-medium text-gray-700">Horaires (séparés par point-virgule, optionnel)</label>
                       <input
                         type="text"
-                        value={newMedicament.horaires?.join(', ') || ''}
-                        onChange={(e) => setNewMedicament({ ...newMedicament, horaires: e.target.value.split(',').map(h => h.trim()).filter(h => h) })}
+                        value={horairesInput}
+                        onChange={(e) => setHorairesInput(e.target.value)}
                         className="mt-1 block w-full rounded border border-gray-300 p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="ex: 08:00, 12:00, 20:00"
+                        placeholder="ex: 08:00;12:00;20:00"
                       />
                     </div>
                     <div className="col-span-1 sm:col-span-2">
@@ -340,7 +374,8 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
                   onClick={() => {
                     setShowCreateForm(false);
                     setEditingTraitement(null);
-                    setNewTraitement({ nom: '', observations: '', medicaments: [] });
+                    setNewTraitement({ nom: '', observations: '', patientId: '', medicaments: [] });
+                    setHorairesInput(''); // Clear horairesInput on form reset
                   }}
                   className="bg-gray-600 text-white px-4 py-2 rounded text-sm hover:bg-gray-700"
                 >
@@ -431,7 +466,7 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
                           setNewTraitement({
                             nom: traitement.nom,
                             observations: traitement.observations || '',
-                            patient: traitement.patient?._id || '',
+                            patientId: traitement.patient?._id || '',
                             medicaments: traitement.medicaments.map(med => ({
                               nomCommercial: med.nomCommercial,
                               dosage: med.dosage,
@@ -442,6 +477,8 @@ export default function TraitementManagement({ token, onClose }: TraitementManag
                               horaires: med.horaires,
                             })),
                           });
+                          // Set horairesInput for the first medicament when editing
+                          setHorairesInput(traitement.medicaments[0]?.horaires?.join('; ') || '');
                         }}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       >

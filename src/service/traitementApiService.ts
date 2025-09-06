@@ -13,14 +13,14 @@ export interface MedicamentTraitement {
 export interface CreateTraitementDTO {
   nom: string;
   observations: string;
-  patient?: string; // Optional for create
+  patientId?: string; // Optional patient ID
   medicaments: MedicamentTraitement[];
 }
 
 export interface UpdateTraitementDTO {
   nom?: string;
   observations?: string;
-  patient?: string; // Optional for update
+  patientId?: string; // Optional patient ID
   medicaments?: MedicamentTraitement[];
 }
 

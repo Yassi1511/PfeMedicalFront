@@ -407,21 +407,21 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
       icon: Calendar,
       title: 'Rendez-vous',
       description: 'Consultations du jour',
-      color: 'from-green-500 to-green-600',
+      color: 'from-blue-500 to-blue-600',
       onClick: () => setShowRdvManagement(true),
     },
     {
       icon: FileText,
       title: 'Ordonnances',
       description: 'Gérer les ordonnances',
-      color: 'from-purple-500 to-purple-600',
+      color: 'from-blue-500 to-blue-600',
       onClick: () => setShowOrdonnanceManagement(true),
     },
     {
       icon: Clipboard,
       title: 'Traitements',
       description: 'Gérer les traitements patients',
-      color: 'from-orange-500 to-orange-600',
+      color: 'from-blue-500 to-blue-600',
       onClick: () => setShowTraitementManagement(true),
     },
   ];
@@ -687,8 +687,8 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <Users className="w-5 h-5 text-green-600" />
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Users className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Patients</p>
@@ -698,8 +698,8 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-purple-600" />
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Ordonnances</p>
@@ -709,8 +709,8 @@ export default function Dashboard({ user, onLogout, onOpenProfile }: DashboardPr
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                    <Clipboard className="w-5 h-5 text-orange-600" />
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Clipboard className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Traitements</p>
